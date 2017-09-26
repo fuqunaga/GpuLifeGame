@@ -25,7 +25,7 @@ inline bool GetAlive(int2 xy)
 void Step (uint3 id : SV_DispatchThreadID)
 {
 	int2 pos = id.xy;
-	if ( (pos.x <= _Width) && (pos.y <= _Height))
+	if ( (pos.x < _Width) && (pos.y < _Height))
 	{
 		bool alive0  = GetAlive(id.xy + int2(-1,-1));
 		bool alive1  = GetAlive(id.xy + int2( 0,-1));
@@ -60,7 +60,7 @@ float _InputRadius;
 void Input (uint3 id : SV_DispatchThreadID)
 {
 	int2 pos = id.xy;
-	if ( (pos.x <= _Width) && (pos.y <= _Height))
+	if ( (pos.x < _Width) && (pos.y < _Height))
 	{
 		if ( distance(_InputPos, pos) < _InputRadius) 
 		{

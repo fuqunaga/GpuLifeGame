@@ -7,18 +7,18 @@
 		Pass
 		{
 			CGPROGRAM
+			#pragma target 5.0
 			#pragma vertex vert_img
 			#pragma fragment frag
 			
 			#include "UnityCG.cginc"
-			#include "Data.cginc"
+			#include "./Data.cginc"
 
 			StructuredBuffer<Data> _Buf;
 
 			fixed4 frag (v2f_img i) : SV_Target
 			{
-				int2 xy = (int2(_Width,_Height) - 1) * i.uv ;
-				if ( xy.x >= _Width || xy.y > _Height) return fixed4(1,0,0,1);
+				int2 xy = int2(_Width,_Height) * i.uv;
 				Data data = _Buf[xyToIdx(xy)];
 				return fixed4((data.alive ? 1 : 0.5).xxx, 1);
 			}
