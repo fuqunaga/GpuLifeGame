@@ -46,7 +46,7 @@ void Step (uint3 id : SV_DispatchThreadID)
             + alive6 
             + alive7;
 
-       _WriteBuf[xyToIdx(pos)].alive = (center && (count == 2 || count == 3)) || (!center && count == 3);
+		_WriteBuf[xyToIdx(pos)].alive = (count == 3) || (center && (count == 2));
 	}
 }
 
