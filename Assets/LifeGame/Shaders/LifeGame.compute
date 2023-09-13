@@ -1,21 +1,21 @@
 ﻿#pragma kernel Step
 #pragma kernel Input
 
-
 #define NUM_THREAD_X 32
 #define NUM_THREAD_Y 32
 #define NUM_THREAD_Z 1
 
+#include "Variables.hlsl"
 
-#include "Data.cginc"
 
+RWStructuredBuffer<int> _WriteBuf;
+StructuredBuffer<int> _ReadBuf;
 
-RWStructuredBuffer<Data> _WriteBuf;
-StructuredBuffer<Data> _ReadBuf;
-
-inline bool GetAlive(int2 xy)
+inline int GetAlive(int2 xy)
 {
-    return (any(xy < 0) || (_Width <= xy.x) || (_Height <= xy.y)) ? false : _ReadBuf[xyToIdx(xy)].alive;
+	return (any(xy < 0) || (_Width <= xy.x) || (_Height <= xy.y))
+		       ? false
+		       : _ReadBuf[XyToIdx(xy)];
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,15 +27,15 @@ void Step (uint3 id : SV_DispatchThreadID)
 	int2 pos = id.xy;
 	if ( (pos.x < _Width) && (pos.y < _Height))
 	{
-		bool alive0  = GetAlive(id.xy + int2(-1,-1));
-		bool alive1  = GetAlive(id.xy + int2( 0,-1));
-		bool alive2  = GetAlive(id.xy + int2( 1,-1));
-		bool alive3  = GetAlive(id.xy + int2(-1, 0));
-		bool center = GetAlive(id.xy + int2( 0, 0));
-		bool alive4  = GetAlive(id.xy + int2( 1, 0));
-		bool alive5  = GetAlive(id.xy + int2(-1, 1));
-		bool alive6  = GetAlive(id.xy + int2( 0, 1));
-		bool alive7  = GetAlive(id.xy + int2( 1, 1));
+		int alive0  = GetAlive(id.xy + int2(-1,-1));
+		int alive1  = GetAlive(id.xy + int2( 0,-1));
+		int alive2  = GetAlive(id.xy + int2( 1,-1));
+		int alive3  = GetAlive(id.xy + int2(-1, 0));
+		int center  = GetAlive(id.xy + int2( 0, 0));
+		int alive4  = GetAlive(id.xy + int2( 1, 0));
+		int alive5  = GetAlive(id.xy + int2(-1, 1));
+		int alive6  = GetAlive(id.xy + int2( 0, 1));
+		int alive7  = GetAlive(id.xy + int2( 1, 1));
 
         int count = alive0
             + alive1 
@@ -46,7 +46,8 @@ void Step (uint3 id : SV_DispatchThreadID)
             + alive6 
             + alive7;
 
-		_WriteBuf[xyToIdx(pos)].alive = (count == 3) || (center && (count == 2));
+		int alive = (count == 3) || (center && (count == 2));
+		_WriteBuf[XyToIdx(pos)] = alive;
 	}
 }
 
@@ -64,7 +65,7 @@ void Input (uint3 id : SV_DispatchThreadID)
 	{
 		if ( distance(_InputPos, pos) < _InputRadius) 
 		{
-			_WriteBuf[xyToIdx(pos)].alive = true;
+			_WriteBuf[XyToIdx(pos)] = 1;
 		}
 	}
 }

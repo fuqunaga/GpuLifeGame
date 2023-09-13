@@ -1,26 +1,26 @@
 ﻿using UnityEngine;
 
-
 [RequireComponent(typeof(LifeGame))]
 public class LifeGameUpdater : MonoBehaviour
 {
-    public float _resolutionScale = 0.5f;
-    static int _lastWidth;
-    static int _lastHeight;
-    LifeGame _lifeGame;
+    private static int _lastWidth;
+    private static int _lastHeight;
+    
+    public float resolutionScale = 0.5f;
+    public int randomSeed;
+    private LifeGame _lifeGame;
 
     private void Start()
     {
         _lifeGame = GetComponent<LifeGame>();
     }
 
-
-    void Update()
+    private void Update()
     {
-        _lifeGame.Step(CreateStepData(_resolutionScale));
+        _lifeGame.Step(CreateStepData(resolutionScale));
     }
 
-    public static LifeGame.StepData CreateStepData(float resolutionScale)
+    private LifeGame.StepData CreateStepData(float resolutionScale)
     {
         var isResize = (Screen.width != _lastWidth) || (Screen.height != _lastHeight);
         if ( isResize)
@@ -34,11 +34,10 @@ public class LifeGameUpdater : MonoBehaviour
             isResize = isResize,
             width = Mathf.FloorToInt(_lastWidth * resolutionScale),
             height = Mathf.FloorToInt(_lastHeight * resolutionScale),
-            randSeed = Mathf.FloorToInt(Random.value * int.MaxValue),
+            randSeed = randomSeed,
             isInputEnable = Input.GetMouseButton(0),
             inputPos = Input.mousePosition * resolutionScale,
             deltaTime = Time.deltaTime
         };
-
     }
 }

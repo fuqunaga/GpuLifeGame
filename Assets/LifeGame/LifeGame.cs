@@ -1,69 +1,34 @@
-﻿using System.Linq;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
+using Unity.Collections;
 using UnityEngine;
-
+using UnityEngine.Serialization;
+using Random = System.Random;
 
 [RequireComponent(typeof(Camera))]
 public class LifeGame : MonoBehaviour
 {
-    public static class COMMONPARAM
+    #region Type Define
+    
+    private static class CommonParam
     {
-        public const string WIDTH = "_Width";
-        public const string HEIGHT = "_Height";
+        public static readonly int Width = Shader.PropertyToID("_Width");
+        public static readonly int Height = Shader.PropertyToID("_Height");
     }
 
-    public static class CSPARAM
+    private static class CsParam
     {
-        public const string KERNEL_STEP = "Step";
-        public const string WRITE_BUF = "_WriteBuf";
-        public const string READ_BUF = "_ReadBuf";
+        public const string KernelStep = "Step";
+        public static readonly int WriteBuf = Shader.PropertyToID("_WriteBuf");
+        public static readonly int ReadBuf = Shader.PropertyToID("_ReadBuf");
 
-        public const string KERNEL_INPUT = "Input";
-        public const string INPUT_POS = "_InputPos";
-        public const string INPUT_RADIUS = "_InputRadius";
+        public const string KernelInput = "Input";
+        public static readonly int InputPos = Shader.PropertyToID("_InputPos");
+        public static readonly int InputRadius = Shader.PropertyToID("_InputRadius");
     }
 
-    public static class SHADERPARAM
+    private static class ShaderParam
     {
-        public const string BUF = "_Buf";
-    }
-
-    public struct Data
-    {
-        public int alive;
-    }
-
-    [Header("CS")]
-    public ComputeShader _cs;
-
-    public float _stepInterval = 0.1f;
-    public float _initialAliveRate = 0.2f;
-
-    float _interval = 0f;
-    ComputeBuffer _writeBufs;
-    ComputeBuffer _readBufs;
-
-    public float _InputRadius = 10f;
-
-    [Header("Render")]
-    public Shader _shader;
-    Material _mat;
-
-    void Start()
-    {
-        _mat = new Material(_shader);
-    }
-
-    private void OnDestroy()
-    {
-        DestroyBufs();
-        if (_mat != null) Destroy(_mat);
-    }
-
-    void DestroyBufs()
-    {
-        if (_readBufs != null) { _readBufs.Release(); _readBufs = null; }
-        if (_writeBufs != null) { _writeBufs.Release(); _writeBufs = null; }
+        public static readonly int Buf = Shader.PropertyToID("_Buf");
     }
 
     public class StepData
@@ -75,6 +40,53 @@ public class LifeGame : MonoBehaviour
         public bool isInputEnable;
         public Vector2 inputPos;
         public float deltaTime;
+    }
+    
+    #endregion
+    
+
+    [FormerlySerializedAs("cs")] [Header("ComputeShader")]
+    public ComputeShader computeShader;
+
+    public float stepInterval;
+    public float initialAliveRate = 0.2f;
+
+    private float _interval;
+    private GraphicsBuffer _writeBuffer;
+    private GraphicsBuffer _readBuffer;
+
+    public float inputRadius = 10f;
+
+    
+    [Header("Render")]
+    public Shader shader;
+
+    private Material _mat;
+
+    
+    [Header("Reproducibility")]
+    // for inspector(and copy for reproducibility)
+    public int width;
+    public int height;
+    public int seed;
+    
+    private void Start()
+    {
+        _mat = new Material(shader);
+    }
+
+    private void OnDestroy()
+    {
+        DestroyBuffers();
+        if (_mat != null) Destroy(_mat);
+    }
+
+    private void DestroyBuffers()
+    {
+        _readBuffer?.Release();
+        _writeBuffer?.Release();
+        _readBuffer = null;
+        _writeBuffer = null;
     }
 
     public void Step(StepData data)
@@ -93,84 +105,75 @@ public class LifeGame : MonoBehaviour
         if (_interval <= 0f)
         {
             DoStep();
-            _interval = Mathf.Max(0f, _interval + _stepInterval);
+            _interval = Mathf.Max(0f, _interval + stepInterval);
         }
     }
 
-    [Header("Reproducibility")]
-    // for inspector(and copy for reproducibility)
-    public int _width;
-    public int _height;
-    public int _seed; 
-
-    void DoResize(StepData data)
+    private void DoResize(StepData data)
     {
-        _width = _width <= 0 ? data.width : _width;
-        _height = _height <= 0 ? data.height : _height;
+        width = width <= 0 ? data.width : width;
+        height = height <= 0 ? data.height : height;
 
-        _cs.SetInt(COMMONPARAM.WIDTH, _width);
-        _cs.SetInt(COMMONPARAM.HEIGHT, _height);
+        computeShader.SetInt(CommonParam.Width, width);
+        computeShader.SetInt(CommonParam.Height, height);
 
-        DestroyBufs();
+        DestroyBuffers();
 
-        _seed = (_seed <= 0) ? data.randSeed : _seed;
-        var rand = new System.Random(_seed);
-        var gridNum = _width * _height;
-        var bufs = Enumerable.Range(0, 2).Select(_ => new ComputeBuffer(gridNum, Marshal.SizeOf(typeof(Data)))).ToArray();
+        seed = (seed <= 0) ? data.randSeed : seed;
+        var rand = new Random(seed);
+        var gridNum = width * height;
+        
+        _readBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, gridNum, Marshal.SizeOf(typeof(int)));
+        _writeBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, gridNum, Marshal.SizeOf(typeof(int)));
 
-        _readBufs = bufs[0];
-        _writeBufs = bufs[1];
-
-        _readBufs.SetData(Enumerable.Range(0, gridNum).Select(_ => new Data() { alive = (rand.NextDouble() < _initialAliveRate) ? 1 : 0 }).ToArray());
+        var array = new NativeArray<int>(_readBuffer.count, Allocator.Temp);
+        for (var i = 0; i < gridNum; ++i)
+        {
+            array[i] = (rand.NextDouble() < initialAliveRate) ? 1 : 0;
+        }
+        _readBuffer.SetData(array);
+        array.Dispose();
     }
 
-
-    void DoInput(StepData data)
+    private void DoInput(StepData data)
     {
-        var kernel = _cs.FindKernel(CSPARAM.KERNEL_INPUT);
-        _cs.SetVector(CSPARAM.INPUT_POS, data.inputPos);
-        _cs.SetFloat(CSPARAM.INPUT_RADIUS, _InputRadius);
-        _cs.SetBuffer(kernel, CSPARAM.WRITE_BUF, _readBufs);
+        var kernel = computeShader.FindKernel(CsParam.KernelInput);
+        computeShader.SetVector(CsParam.InputPos, data.inputPos);
+        computeShader.SetFloat(CsParam.InputRadius, inputRadius);
+        computeShader.SetBuffer(kernel, CsParam.WriteBuf, _readBuffer);
 
-        Dispatch(_cs, kernel, new Vector3(_width, _height, 1));
+        Dispatch(computeShader, kernel, new Vector3(width, height, 1));
     }
 
-    void DoStep()
+    private void DoStep()
     {
-        var kernel = _cs.FindKernel(CSPARAM.KERNEL_STEP);
+        var kernel = computeShader.FindKernel(CsParam.KernelStep);
 
-        _cs.SetBuffer(kernel, CSPARAM.READ_BUF, _readBufs);
-        _cs.SetBuffer(kernel, CSPARAM.WRITE_BUF, _writeBufs);
+        computeShader.SetBuffer(kernel, CsParam.ReadBuf, _readBuffer);
+        computeShader.SetBuffer(kernel, CsParam.WriteBuf, _writeBuffer);
 
-        Dispatch(_cs, kernel, new Vector3(_width, _height, 1));
+        Dispatch(computeShader, kernel, new Vector3(width, height, 1));
 
-        SwapBuf();
+        (_writeBuffer, _readBuffer) = (_readBuffer, _writeBuffer);
     }
-
-    void SwapBuf()
-    {
-        var tmp = _readBufs;
-        _readBufs = _writeBufs;
-        _writeBufs = tmp;
-    }
-
 
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        if (_readBufs != null)
-        {
-            _mat.SetInt(COMMONPARAM.WIDTH, _width);
-            _mat.SetInt(COMMONPARAM.HEIGHT, _height);
-            _mat.SetBuffer(SHADERPARAM.BUF, _readBufs);
-            Graphics.Blit(source, destination, _mat);
-        }
+        if (_readBuffer == null) return;
+        
+        _mat.SetInt(CommonParam.Width, width);
+        _mat.SetInt(CommonParam.Height, height);
+        _mat.SetBuffer(ShaderParam.Buf, _readBuffer);
+        Graphics.Blit(source, destination, _mat);
     }
 
-    public static void Dispatch(ComputeShader cs, int kernel, Vector3 threadNum)
+    private static void Dispatch(ComputeShader cs, int kernel, Vector3 threadNum)
     {
-        uint x, y, z;
-        cs.GetKernelThreadGroupSizes(kernel, out x, out y, out z);
-        cs.Dispatch(kernel, Mathf.CeilToInt(threadNum.x / x), Mathf.CeilToInt(threadNum.y / y), Mathf.CeilToInt(threadNum.z / z));
+        cs.GetKernelThreadGroupSizes(kernel, out var x, out var y, out var z);
+        cs.Dispatch(kernel,
+            Mathf.CeilToInt(threadNum.x / x),
+            Mathf.CeilToInt(threadNum.y / y),
+            Mathf.CeilToInt(threadNum.z / z)
+        );
     }
-
 }

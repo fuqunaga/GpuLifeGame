@@ -12,15 +12,15 @@
 			#pragma fragment frag
 			
 			#include "UnityCG.cginc"
-			#include "./Data.cginc"
+			#include "Variables.hlsl"
 
-			StructuredBuffer<Data> _Buf;
+			StructuredBuffer<int> _Buf;
 
 			fixed4 frag (v2f_img i) : SV_Target
 			{
 				int2 xy = int2(_Width,_Height) * i.uv;
-				Data data = _Buf[xyToIdx(xy)];
-				return fixed4((data.alive ? 1 : 0.5).xxx, 1);
+				int alive = _Buf[XyToIdx(xy)];
+				return fixed4((alive != 0 ? 1 : 0.5).xxx, 1);
 			}
 			ENDCG
 		}
